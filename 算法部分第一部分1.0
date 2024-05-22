@@ -1,0 +1,87 @@
+#include<iostream>
+#include<vector>
+#include<map>
+using namespace std;
+class task {
+public:
+	string name;
+	int lasting_time;
+	int cost;//cost 输入的劳累度 1~5（完全无影响
+	int id;//id和索引一致
+	vector<int>connected_task;//里面存索引
+};
+class ddl_task :public task {
+
+};
+class block {
+public:
+	block(task&t){}
+	block(task&t1,task&t2){}
+};
+int j_value(const task&t){
+	return 1;
+}
+int j_value(const task&t1,const task&t2){
+	return 1;
+}
+struct node {
+	node(){}
+	vector<block> house;
+	int val;
+	node(const vector<block>&b,int v):house(b),val(v){}
+	void push_back(block&b) {
+		house.push_back(b);
+	}
+};
+bool operator<(const vector<task>& lhs, const vector<task>& rhs) {
+	// 遍历任务数组，比较每个任务的 id
+	for (size_t i = 0; i < lhs.size() && i < rhs.size(); ++i) {
+		if (lhs[i].id < rhs[i].id) return true;
+		if (lhs[i].id > rhs[i].id) return false;
+	}
+	// 如果数组大小不同，比较大小
+	return lhs.size() < rhs.size();
+}
+map<vector<task>, node>dp;
+//max_value理解成最好的学习效果
+// 用户输入任务难度，越难对应学习效果越差，同时做会让学习效果下降更甚；
+//首先，得到一个输入的task数组
+vector<task> input_task;
+
+vector<block> get_best_combination() {
+	vector<block> Block_now;
+	Block_now.push_back(block(input_task[0]));
+	
+	dp[vector<task>(input_task.begin(), input_task.begin() + 1)]= node(Block_now, j_value(input_task[0]));
+	
+	for (int i = 1; i < input_task.size(); i++) {
+		//不组合
+		//加i 到索引为i-1
+		vector<block> Block_now = dp[vector<task>(input_task.begin(), input_task.begin() + i)].house;
+		Block_now.push_back(input_task[i]);
+		int index = -1;
+		int max_value = j_value(input_task[i])+dp[vector<task>(input_task.begin(), input_task.begin() + i)].val;
+		
+		//遍历所有可能组合
+		for (int j = 0; j < input_task[i].connected_task.size(); j++) {
+			//状态
+			vector<task> op_task(input_task.begin(), input_task.begin() + i);
+			op_task.erase(input_task.begin()+input_task[i].connected_task[j]);//这里用到id与索引一致
+			Block_now = dp[op_task].house;
+			Block_now.push_back(block(input_task[i],input_task[input_task[i].connected_task[j]]));
+			//value
+			int v_now = dp[op_task].val + j_value(input_task[i], input_task[input_task[i].connected_task[j]]);
+			if (v_now > max_value) {
+				index = j; max_value = v_now;
+			}
+		}
+		if (index >= 0) {
+			vector<task> op_task(input_task.begin(), input_task.begin() + i);
+			op_task.erase(input_task.begin() + input_task[i].connected_task[index]);//这里用到id与索引一致
+			Block_now = dp[op_task].house;
+			Block_now.push_back(block(input_task[i], input_task[input_task[i].connected_task[index]]));
+		}
+		dp[vector<task>(input_task.begin(), input_task.begin() + i + 1)] = node(Block_now, max_value);
+	}
+	return dp[vector<task>(input_task)].house;
+}
