@@ -1,0 +1,426 @@
+#include<iostream>
+#include<vector>
+#include<map>
+#include<cmath>
+#include<algorithm>
+#include<set>
+using namespace std;
+int ddl_rate, late_rate;
+class task {
+public:
+	string name;
+	int lasting_time;
+	int label;//fixed 2   ||ddl 1
+	int hard;//cost 输入的劳累度 1~
+	bool state;//若为1，则只能独立完成
+	int id;//id和索引一致
+	int ddl;
+	int fixed_start, fixed_end,fixed_day;
+	task(){}
+	task(int id, string name, int label,bool state, int ddl, int hard, int lasting_time) 
+		:id(id), name(name), label(label),state(state), ddl(ddl), hard(hard), lasting_time(lasting_time) {}
+	task(int id, string name, int label, int state, int ddl, int hard, int fixed_s,int fixed_e,int fixed_day)
+		:id(id), name(name), label(label), state(state), ddl(ddl), hard(hard), fixed_start(fixed_s),fixed_end(fixed_e),fixed_day(fixed_day) {}
+
+};
+class DDl_task :public task {
+
+};
+class block {
+public:
+	vector<task> task_source;
+	block(){}
+	block(task t){
+		label = t.label;//////!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+	}
+	block(task t1,task t2){
+		//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+		ddl_day = min(t1.ddl,t2.ddl);
+		label = t1.label + t2.label == 2 ? 1 : 2;
+
+	}
+	block(const block& x, int begin, int end, int days) {
+		*this = x;
+		start_time = begin;
+		end_time = end;
+		Day = days;
+		
+	}
+	int label=1; //ddl 1  ||fixed 2 默认为1
+	int ddl_day;
+	int last_time;
+	int Day,start_time, end_time;//要填入的内容
+};
+double j_value(const task&t){
+
+	return -pow(1.5,t.hard)*t.lasting_time;
+
+}
+double j_value(const task t1,const task t2){
+	return -pow(1.5, t1.hard+t2.hard)*(t1.lasting_time+t2.lasting_time);
+}
+struct node {
+	node(){}
+	vector<block> house;
+	double val;
+	node( vector<block>b,double v):house(b),val(v){}
+};
+class altask {
+public:
+	vector<task*> house;
+	task* operator()(int i){
+		return house[i];
+	}
+	altask(task*x,int num) {
+		tasksum = num;
+		for (int i = 0; i < num; i++) house.push_back(x+i);
+	}
+	int tasksum;
+};
+bool operator<(const vector<task>& lhs, const vector<task>& rhs) {
+	// 遍历任务数组，比较每个任务的 id
+	for (size_t i = 0; i < lhs.size() && i < rhs.size(); ++i) {
+		if (lhs[i].id < rhs[i].id) return true;
+		if (lhs[i].id > rhs[i].id) return false;
+	}
+	// 如果数组大小不同，比较大小
+	return lhs.size() < rhs.size();
+}
+
+//max_value理解成最好的学习效果
+// 用户输入任务难度，越难对应学习效果越差，同时做会让学习效果下降更甚；
+//首先，得到一个输入的task数组
+
+
+//altask alltask;
+
+void seperate(vector<task>& alltask_task,vector<task>& able_task, vector<task>& independent_task) {
+	for (int i = 0; i < alltask_task.size(); i++) {
+		if (alltask_task[i].state == true) {
+			able_task.push_back(alltask_task[i]);
+		}
+		else if(alltask_task[i].state == false) independent_task.push_back(alltask_task[i]);
+	}
+}
+//ddl_task实际上是all_task
+vector<block> get_best_combination(vector<task>&all_task) {
+	//将能组合的和不能组合的分开
+	vector<task>able_task;
+	vector<task>independent_task;
+	seperate(all_task, able_task, independent_task);
+
+	map<vector<task>, node>dp;
+
+	//初始化
+	vector<block> Block_now;
+	Block_now.push_back(block(able_task[0]));
+
+	//op代表操作的对象
+	vector<task> op; 
+	dp[op] = node(vector<block>(0), 0);
+	op.push_back(able_task[0]);
+	dp[op]= node(Block_now, j_value(able_task[0]));
+	
+	for (int i = 1; i < able_task.size(); i++) {
+		//不组合
+		//加i 到索引为i-1
+		// 
+		//if (able_task[i].state == 1) continue;
+
+		Block_now = dp[op].house;
+		//op表示 0~i-1 的
+		Block_now.push_back(block(able_task[i]));
+		int index = -1;
+		double max_value = j_value(able_task[i])+dp[op].val;
+		
+
+		//遍历所有可能组合
+		for (int j = 0; j < i; j++) {
+			//状态
+			//这里就没考虑两个fixed在同一时间的情况
+			//目前结果是 fixed与ddl可以混合组合，同时保证了不能fixed
+
+
+			if (able_task[i].label == 2 && able_task[j].label == 2) continue;
+			vector<task> op_copy(op);
+			op_copy.erase(op_copy.begin()+j);//这里用到id与索引一致
+			Block_now = dp[op_copy].house;
+			Block_now.push_back(block(able_task[i], able_task[j]));
+			//value
+			double v_now = dp[op_copy].val + j_value(able_task[i], able_task[j]);
+			if (v_now > max_value) {
+				index = j; max_value = v_now;
+			}
+		}
+		if (index >= 0) {
+			vector<task> op_copy(op);
+			op_copy.erase(op_copy.begin() + index);//这里用到id与索引一致
+			Block_now = dp[op_copy].house;
+			Block_now.push_back(block(able_task[i], able_task[index]));
+		}
+		else {
+			Block_now = dp[op].house;
+			Block_now.push_back(block(able_task[i]));
+		}
+		dp[op] = node(Block_now, max_value);
+		op.push_back(able_task[i]);
+	}
+
+	//加入indepent
+	vector<block> out(dp[op].house);
+	for (int i = 0; i < independent_task.size(); i++) out.push_back(block(independent_task[i]));
+	return out;
+}
+//获得的block的ddl,label属性是已经填好的,ddl haiyu shijian\day
+
+vector<vector<vector<block>>> get_everyday_source_block( vector<block>&alltask_block) {
+	vector<vector<vector<block>>> outt;
+	outt.resize(2);
+	for (int day = 0; day <= 6; day++) {
+		vector<block> b;
+		vector<block> c;
+		for (int i = 0; i < alltask_block.size(); i++) {
+			if (alltask_block[i].ddl_day == day) {
+				if (alltask_block[i].label == 2) b.push_back(block(alltask_block[i]));
+				else if (alltask_block[i].label == 1) c.push_back(block(alltask_block[i]));
+			}
+		}
+		outt[0].push_back(b);
+		outt[1].push_back(c);
+	}
+	
+	return outt;
+}
+class PersonalSet {
+public:
+	double Ddl, Early, Late;
+	double ddl_rate; //1 2 3 4 5
+	double late_rate;//1 2 3 4 5
+	int day_begin, day_end;
+	PersonalSet(double ddl_rate, double late_rate, int day_begin,int day_end){}
+};
+
+struct slot {
+	int day;
+	int begin, end;
+	slot(int day, int begin, int end) {};
+};
+
+
+
+vector<block>get_today_block(const vector<vector<block>>& ddl_block,int day) {
+	vector<block>today_block;
+	for (int i = 0; i < ddl_block.size(); i++) {
+		if (ddl_block[day][i].ddl_day != day) continue;
+		else today_block.push_back(ddl_block[day][i]);
+	}
+	return today_block;
+}
+
+vector<slot> get_new_slot(vector<slot> cur_slot, int start, int end) {
+	for (int i = 0; i < cur_slot.size(); i++) {
+		//事件的start和end一定在一个slot内
+		if (cur_slot[i].begin < start && cur_slot[i].end >= end) {
+			cur_slot[i].end = start - 1; 
+		}
+		else if (cur_slot[i].begin >= start && cur_slot[i].begin <= end && cur_slot[i].end >= end) {
+			cur_slot.erase(cur_slot.begin() + i);
+			i--;
+		}
+	}
+	return cur_slot;
+}
+
+vector<slot> get_today_slot(const vector<block>& fixed_task_block, vector<slot>& last_slot, int day, int day_beginning, int day_ending) {
+	int time_now = day_beginning;
+	vector<slot>new_slot;
+	for (int i = day_beginning; i < day_ending; i++) {
+		new_slot.push_back(slot(day, i, day_ending));
+	}
+	for (int i = 0; i < fixed_task_block.size(); i++) {
+		if (fixed_task_block[i].ddl_day != day) continue;
+		new_slot = get_new_slot(new_slot, fixed_task_block[i].start_time, fixed_task_block[i].end_time);
+	}
+	for (int i = 0; i < new_slot.size(); i++) last_slot.push_back(new_slot[i]);
+	return last_slot;
+}
+
+
+double get_value(block Block,int day,double ddl_rate, double late_rate,int day_begining) {
+	int through_day = Block.Day - day;
+	return -abs((Block.end_time - day_begining) / 48.0 - late_rate)
+		+ -abs((float((Block.Day - 1) * 48 + Block.end_time)) / day * 48 - ddl_rate);
+}
+
+void dfs(int block_index,vector<slot>now_slot, const vector<block>&today_block,
+	double value_now,double max_value, vector<block>&record_block,//这个可以&吗
+	vector<block>&best_arrange, vector<slot>&last_slot, double ddl_rate, double late_rate,int day,int day_begin,int day_end) {
+	if (block_index == today_block.size()) {
+		if (value_now > max_value) {
+			best_arrange = record_block;  max_value = value_now;
+
+			//last_slot存储
+			last_slot = now_slot;
+		}
+		return ;
+	}
+	for (int i = 0; i < now_slot.size(); i++) { 
+		if (today_block[block_index].last_time + now_slot[i].begin > now_slot[i].end) continue;
+
+		//填入起始终止时间\day
+		block op=block(today_block[block_index], now_slot[i].begin, now_slot[i].end,day);
+		record_block.push_back(op);
+
+		//get_new_slot(now_slot, now_slot[i].begin, now_slot[i].end);
+
+		dfs(block_index + 1, get_new_slot(now_slot, now_slot[i].begin, now_slot[i].end), today_block,
+			value_now + get_value(op,day,ddl_rate, late_rate, day_begin),max_value,record_block,
+			best_arrange,last_slot,ddl_rate,late_rate,day,day_begin,day_end);
+
+		record_block.pop_back();
+	}
+	//如果存在有无法塞入的点，那么就会无法运行到开头的判断条件
+	return;
+}
+
+
+
+class sort_judge {
+public:
+	bool operator()(block& t1, block& t2) {
+		if (t1.Day < t2.Day) return true;
+		else if (t1.Day > t2.Day)return false;
+		else {
+			return t1.start_time < t2.start_time;
+		}
+	}
+};
+bool time_arrange(vector<vector<block>>&best_arrange,int day_begin,int day_end,double ddl_rate,double late_rate,vector<block>block_combination) {
+	
+	//首先 得到的block组中包含最优组合和只能独立完成两部分，其中二者都包括fixed
+	//在这个函数中，想将含fixed的block拎出来，再对不固定时间的block进行排序
+
+	//传入的是alltask_task vector<task>
+	vector<vector<vector<block>>> source_block=get_everyday_source_block(block_combination);
+	vector<vector<block>>fixed_task_block = source_block[0];
+	//排序只需要排ddl性质的block
+	vector<vector<block>> all_ddl_block= source_block[1];
+	
+	//day from 0 to 6
+	vector<slot>last_slot;
+	for (int day = 0; day <= 6; day++) {
+		//last_slot在函数中发生了改变
+		vector<slot> today_slot = get_today_slot(fixed_task_block[day], last_slot, day, day_begin, day_end);
+		
+		//先进入今天block的是ddl
+		vector<block>today_block = get_today_block(all_ddl_block,day);
+		
+		vector<block> best_everyday_arrange;
+		vector<block>record;
+		dfs(0,today_slot, today_block,0,-1000000,record, best_everyday_arrange, last_slot,ddl_rate,late_rate,day,day_begin, day_end);
+		if (best_everyday_arrange.empty()) {
+			return false;//   直接return可以吗？ 
+		}
+		//last slot已经在dfs中修改过
+		
+		//放入fixed_block
+		for (int i = 0; i < fixed_task_block[day].size(); i++) {
+			best_everyday_arrange.push_back(fixed_task_block[day][i]);
+		}
+
+		//sort making from small to big
+		sort(best_everyday_arrange.begin(), best_everyday_arrange.end(), sort_judge());
+		best_arrange.push_back(best_everyday_arrange);
+	}
+	return true;
+	//best_arrange应是全局变量
+}
+class arrange_measure {
+public:
+	bool operator()(block t1,block t2) {
+
+	}
+};
+vector<set<block, arrange_measure>> final_set;
+//void final_out() {
+//	vector<vector<block>>everyday_fixed_block = get_everyday_fixed_block(fixed_task);
+//	for (int day = 0; day <= 6; day++) {
+//		set<block, arrange_measure> everyday;
+//		for (int i = 0; i < best_arrange[day].size(); i++) {
+//			everyday.insert(best_arrange[day][i]);
+//		}
+//		for (int i = 0; i < everyday_fixed_block[day].size(); i++) {
+//			everyday.insert(everyday_fixed_block[day][i]);
+//		}
+//	}
+//}
+
+//读入的是已经读好的alltask
+//使用方式：
+//首先定义出一个judge=true;
+// vector<vector<block>> block_temp=arrange_running（.......,judge）；
+//判断judge是否为false，进而提示是否需要重新输入，并终止进行
+//调用类的成员函数init_day(block_temp)
+
+
+vector<vector<block>> arrange_running(altask alltask,PersonalSet priority,bool& judge) {
+	//首先得到vector<task>类型的source
+	vector<task>alltask_task;
+	alltask_task.resize(alltask.tasksum);
+	for (int i = 0; i < alltask.tasksum; i++) alltask_task[i]=*alltask(i);
+
+	//进行组合
+	vector<block>block_combination = get_best_combination(alltask_task);
+
+	//进行排列
+	vector<vector<block>>best_arrange;
+	judge=time_arrange(best_arrange, priority.day_begin, priority.day_end, priority.ddl_rate, priority.late_rate, block_combination);
+	return best_arrange;
+}
+//注意，得到的最终结果time可能大于48
+
+int main() {
+	task Altask[4];
+	//for (int i = 0; i < 3; i++) {
+	//	string name;int lasting_time;
+	//	int label;//fixed 2   ||ddl 1
+	//	int hard;//cost 输入的劳累度 1~
+	//	bool state;//若为1，则只能独立完成
+	//	int id;//id和索引一致
+	//	int ddl;
+	//	int fixed_start, fixed_end;
+	//	cin >> name >>label>>hard;
+	//	
+	//	if (label == 1) {
+	//		cin >> ddl>>lasting_time;
+	//		Altask[i] = task(i, name, label, ddl, hard, lasting_time);
+	//	}
+	//	if (label == 2) {
+	//		cin >> fixed_start >> fixed_end;
+	//		Altask[i] = task(i, name, label, hard, fixed_start,fixed_end);
+	//	}
+	//}
+	Altask[0] = task(0, "math", 1,1, 5, 4, 3);
+	Altask[1] = task(1, "endglish", 1,1, 5, 4, 3);
+	Altask[2] = task(2, "program", 2,1, 5, 4,2);
+	Altask[3] = task(3, "help", 2,1, 5, 4, 1);
+	altask alltask(Altask, 4);
+	/*for (int i = 0; i < 4; i++) {
+		cout << alltask(i)->name << " " << alltask(i)->label << endl;
+	}*/
+	PersonalSet priority(0.8, 0.8, 16, 46);
+	bool judge = 1;
+	vector<vector<block>>best_arrange;
+	arrange_running(alltask, priority, judge);
+	if (judge == false) {
+		cout << "输入任务太多"; return 0;
+	}
+	for (int i = 0; i < 7; i++) {
+		for (int j = 0; j < best_arrange[i].size(); i++) {
+			vector<task>op = best_arrange[i][j].task_source;
+			for (int l = 0; l < op.size(); l++) {
+				cout << op[i].id << " " << op[i].name<<endl;
+			}
+		}
+	}
+}
